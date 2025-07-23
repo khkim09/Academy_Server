@@ -1,0 +1,25 @@
+# 의존성 폴더 (라이브러리)
+# 이 폴더는 `npm install` 명령어로 언제든지 재생성할 수 있습니다.
+node_modules/
+
+# 환경 변수 파일
+# 데이터베이스 비밀번호, AWS 비밀 키 등 모든 민감 정보를 포함합니다.
+# 절대로 GitHub에 올리면 안 됩니다.
+.env
+
+# 로그 파일
+# 서버 실행 중 생성되는 로그 파일들은 GitHub에 올릴 필요가 없습니다.
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# 운영체제 및 에디터 관련 파일
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+
+node_modules/sso-oidc-2019-06-10.examples.json
