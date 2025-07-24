@@ -66,18 +66,29 @@ router.post('/save', async (req, res) => {
     }
 });
 
-// 출결 정보 불러오기 (분반 + 날짜)
+// [수정] 출결 정보 불러오기 (분반 + 날짜)
 router.get('/get', async (req, res) => {
     const { class_name, date } = req.query;
     if (!date) return res.status(400).json({ error: '날짜는 필수입니다.' });
 
     try {
         let query;
-        const params = [date];
+        let params = [date];
+
+        // [수정] '전체 분반'일 경우, 모든 학생 명단을 가져오도록 쿼리 변경
         if (class_name === '전체 분반') {
-            query = `SELECT r.class_name, r.student_name, r.phone, r.school, a.status FROM class_rosters AS r LEFT JOIN attendance AS a ON r.phone = a.phone AND a.date = ? ORDER BY r.class_name, r.student_name`;
+            query = `
+                SELECT r.class_name, r.student_name, r.phone, r.school, a.status 
+                FROM class_rosters AS r 
+                LEFT JOIN attendance AS a ON r.phone = a.phone AND a.date = ? 
+                ORDER BY r.class_name, r.student_name`;
         } else {
-            query = `SELECT r.class_name, r.student_name, r.phone, r.school, a.status FROM class_rosters AS r LEFT JOIN attendance AS a ON r.phone = a.phone AND a.date = ? WHERE r.class_name = ? ORDER BY r.student_name`;
+            query = `
+                SELECT r.class_name, r.student_name, r.phone, r.school, a.status 
+                FROM class_rosters AS r 
+                LEFT JOIN attendance AS a ON r.phone = a.phone AND a.date = ? 
+                WHERE r.class_name = ? 
+                ORDER BY r.student_name`;
             params.push(class_name);
         }
         const [rows] = await pool.query(query, params);
