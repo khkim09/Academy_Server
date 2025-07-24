@@ -1,3 +1,4 @@
+/*
 const express = require('express');
 const router = express.Router();
 const db = require('../db');
@@ -42,9 +43,9 @@ router.get('/roster', async (req, res) => {
 
 // 성적 목록 조회 API
 router.get('/list', async (req, res) => {
-    const { className, round } = req.query;
+    const { className, roundId } = req.query;
 
-    if (!className || !round)
+    if (!className || !roundId)
         return res.status(400).json({ error: '분반과 회차는 필수입니다.' });
 
     try {
@@ -53,7 +54,7 @@ router.get('/list', async (req, res) => {
             FROM class_rosters AS r
             LEFT JOIN scores AS s ON r.phone = s.phone AND r.class_name = s.class_name AND s.round = ?
             WHERE r.class_name = ? ORDER BY student_name;`;
-        const [rows] = await db.query(query, [round, className]);
+        const [rows] = await db.query(query, [roundId, className]);
         res.json(rows);
     } catch (err) { res.status(500).json({ error: '성적 목록 조회 오류' }); }
 });
@@ -160,6 +161,94 @@ router.get('/inquiry', async (req, res) => {
     } catch (err) {
         console.error('성적 조회 중 오류:', err);
         res.status(500).json({ error: '성적 조회 중 서버 오류가 발생했습니다.' });
+    }
+});
+
+module.exports = router;
+*/
+
+const express = require('express');
+const router = express.Router();
+const pool = require('../db');
+
+// 학생 명단 조회 (수정 없음)
+router.get('/roster', async (req, res) => {
+    const { className } = req.query;
+    if (!className) return res.status(400).json({ error: '분반 이름은 필수입니다.' });
+    try {
+        const [rows] = await pool.query('SELECT student_name, phone, school FROM class_rosters WHERE class_name = ? ORDER BY student_name;', [className]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: '학생 명단 조회 오류' }); }
+});
+
+// 성적 목록 조회
+router.get('/list', async (req, res) => {
+    const { className, roundId } = req.query;
+    if (!className || !roundId) return res.status(400).json({ error: '분반과 회차 ID는 필수입니다.' });
+    try {
+        const query = `
+            SELECT r.student_name, r.phone, r.school, s.test_score, s.assignment1, s.assignment2, s.total_question
+            FROM class_rosters AS r
+            LEFT JOIN scores AS s ON r.phone = s.phone AND s.round_id = ?
+            WHERE r.class_name = ? ORDER BY r.student_name;`;
+        const [rows] = await pool.query(query, [roundId, className]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: '성적 목록 조회 오류' }); }
+});
+
+// 성적 저장
+router.post('/save', async (req, res) => {
+    const { round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo } = req.body;
+    if (!round_id || !phone || test_score == null) return res.status(400).json({ error: '필수 항목 누락' });
+
+    try {
+        const sql = `
+            INSERT INTO scores (round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE 
+                student_name=VALUES(student_name), school=VALUES(school), test_score=VALUES(test_score), total_question=VALUES(total_question), 
+                wrong_questions=VALUES(wrong_questions), assignment1=VALUES(assignment1), assignment2=VALUES(assignment2), memo=VALUES(memo);`;
+        await pool.query(sql, [round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo || '']);
+        res.status(200).json({ message: '성적이 성공적으로 저장되었습니다.' });
+    } catch (err) {
+        console.error('성적 저장 오류:', err);
+        res.status(500).json({ error: '성적 저장 중 서버 오류' });
+    }
+});
+
+// 성적 조회
+router.get('/inquiry', async (req, res) => {
+    const { className, roundId, studentName } = req.query;
+    try {
+        let query = `
+            SELECT s.*, r.class_name, r.round_number, r.round_name, m.material_name 
+            FROM scores s 
+            JOIN rounds r ON s.round_id = r.id 
+            LEFT JOIN materials m ON r.id = m.round_id`;
+        const params = [];
+        const conditions = [];
+
+        if (className && className !== '전체 분반') {
+            conditions.push('r.class_name = ?');
+            params.push(className);
+        }
+        if (roundId) {
+            conditions.push('s.round_id = ?');
+            params.push(roundId);
+        }
+        if (studentName) {
+            conditions.push('s.student_name LIKE ?');
+            params.push(`%${studentName}%`);
+        }
+
+        if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
+        query += ' ORDER BY r.class_name, r.round_number, s.student_name';
+
+        const [rows] = await pool.query(query, params);
+        res.json(rows);
+    } catch (err) {
+        console.error('성적 조회 오류:', err);
+        res.status(500).json({ error: '성적 조회 중 서버 오류' });
     }
 });
 

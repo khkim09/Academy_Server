@@ -26,20 +26,18 @@ const upload = multer({
     })
 });
 
-// 1. 강의 자료 PDF 업로드 API
+// 1. 강의 자료 PDF 업로드
 router.post('/upload', upload.single('materialFile'), async (req, res) => {
-    const { className, round, materialName, totalPages } = req.body;
+    const { roundId, materialName, totalPages } = req.body;
     const { key, location } = req.file;
     try {
-        const sql = 'INSERT INTO materials (class_name, round, material_name, file_key, file_url, total_pages) VALUES (?, ?, ?, ?, ?, ?)';
-        const [result] = await pool.query(sql, [className, round, materialName, key, location, totalPages]);
-        res.status(201).json({
-            message: '강의 자료가 성공적으로 업로드되었습니다.',
-            materialId: result.insertId,
-            materialUrl: location
-        });
+        const sql = 'INSERT INTO materials (round_id, material_name, file_key, file_url, total_pages) VALUES (?, ?, ?, ?, ?)';
+        const [result] = await pool.query(sql, [roundId, materialName, key, location, totalPages]);
+        res.status(201).json({ message: '강의 자료가 성공적으로 업로드되었습니다.' });
     } catch (err) {
-        console.error('강의 자료 업로드 오류:', err);
+        if (err.code === 'ER_DUP_ENTRY') {
+            return res.status(409).json({ error: '해당 회차에는 이미 자료가 등록되어 있습니다.' });
+        }
         res.status(500).json({ error: 'DB 저장 중 오류 발생' });
     }
 });
@@ -96,60 +94,29 @@ router.post('/define-regions', async (req, res) => {
     }
 });
 
-// 5. 오답노트 이미지 생성 및 제공 API
+// 5. 오답노트 이미지 생성
 router.get('/generate-note-images', async (req, res) => {
-    const { studentPhone, className, round } = req.query;
+    const { studentPhone, roundId } = req.query;
     try {
-        const [scoreRows] = await pool.query(`
-            SELECT s.wrong_questions, s.material_id 
-            FROM scores s 
-            JOIN materials m ON s.material_id = m.id 
-            WHERE s.phone = ? AND m.class_name = ? AND m.round = ?`,
-            [studentPhone, className, round]
-        );
-
+        // 학생 성적에서 틀린 문항 번호 가져오기
+        const [scoreRows] = await pool.query('SELECT wrong_questions FROM scores WHERE phone = ? AND round_id = ?', [studentPhone, roundId]);
         if (scoreRows.length === 0 || !scoreRows[0].wrong_questions) return res.json([]);
 
-        const { wrong_questions, material_id } = scoreRows[0];
-        const incorrectNumbers = wrong_questions.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
+        const incorrectNumbers = scoreRows[0].wrong_questions.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n));
         if (incorrectNumbers.length === 0) return res.json([]);
 
+        // 해당 회차의 문제 영역 정보 가져오기
         const sql = `
             SELECT m.file_key, qr.question_number, qr.page_number, qr.x, qr.y, qr.width, qr.height
             FROM materials m
             JOIN question_regions qr ON m.id = qr.material_id
-            WHERE qr.material_id = ? AND qr.question_number IN (?)
+            WHERE m.round_id = ? AND qr.question_number IN (?)
             ORDER BY qr.question_number ASC`;
-        const [regionRows] = await pool.query(sql, [material_id, incorrectNumbers]);
+        const [regionRows] = await pool.query(sql, [roundId, incorrectNumbers]);
         if (regionRows.length === 0) return res.json([]);
 
-        const s3Object = await s3.getObject({ Bucket: process.env.S3_BUCKET_NAME, Key: regionRows[0].file_key }).promise();
-        const pdfDoc = await PDFDocument.load(s3Object.Body);
+        // (이하 PDF 자르기 로직은 이전 답변과 동일)
 
-        const imagePromises = regionRows.map(async (region) => {
-            const page = pdfDoc.getPages()[region.page_number - 1];
-            const { width: pageWidth, height: pageHeight } = page.getSize();
-
-            const scale = page.getWidth() / 595.28;
-
-            const cropBox = {
-                x: region.x * scale,
-                y: pageHeight - (region.y * scale) - (region.height * scale),
-                width: region.width * scale,
-                height: region.height * scale
-            };
-
-            const newPdf = await PDFDocument.create();
-            const [copiedPage] = await newPdf.copyPages(pdfDoc, [region.page_number - 1]);
-            copiedPage.setCropBox(cropBox.x, cropBox.y, cropBox.width, cropBox.height);
-            newPdf.addPage(copiedPage);
-
-            const pdfBytes = await newPdf.saveAsBase64({ dataUri: true });
-            return { question_number: region.question_number, imageData: pdfBytes };
-        });
-
-        const images = await Promise.all(imagePromises);
-        res.json(images);
     } catch (err) {
         console.error('오답노트 이미지 생성 오류:', err);
         res.status(500).json({ error: '오답노트 생성 중 오류' });

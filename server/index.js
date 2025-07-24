@@ -39,6 +39,10 @@ app.use('/api/scores', scoreRoutes);
 const materialRoutes = require('./routes/materials');
 app.use('/api/materials', materialRoutes);
 
+// 6. 회차 관리 라우터
+const roundRoutes = require('./routes/rounds');
+app.use('/api/rounds', roundRoutes);
+
 app.get('/', (req, res) => {
     res.send('API 서버가 정상 작동 중입니다.');
 });
