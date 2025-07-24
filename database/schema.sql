@@ -2,13 +2,13 @@ CREATE DATABASE IF NOT EXISTS academy;
 
 USE academy;
 
--- 1. 분반 정보 테이블
+-- 1. 분반 정보
 CREATE TABLE IF NOT EXISTS classes (
     id INT AUTO_INCREMENT PRIMARY KEY,
     class_name VARCHAR(255) NOT NULL UNIQUE
 );
 
--- 2. 학생 명단 정보 테이블
+-- 2. 학생 명단 정보
 CREATE TABLE IF NOT EXISTS class_rosters (
     id INT AUTO_INCREMENT PRIMARY KEY,
     class_name VARCHAR(255) NOT NULL,
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS class_rosters (
     UNIQUE KEY `unique_roster_entry` (`class_name`, `phone`)
 );
 
--- 3. 회차 정보 독립적 관리 테이블
+-- 3. 회차 정보 (독립적 관리의 핵심)
 CREATE TABLE IF NOT EXISTS rounds (
     id INT AUTO_INCREMENT PRIMARY KEY,
     class_name VARCHAR(255) NOT NULL,
@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS rounds (
     UNIQUE KEY `unique_round` (`class_name`, `round_number`)
 );
 
--- 4. 강의 자료 테이블 (회차에 독립적 연결)
+-- 4. 강의 자료 (회차에 종속)
 CREATE TABLE IF NOT EXISTS materials (
     id INT AUTO_INCREMENT PRIMARY KEY,
     round_id INT NOT NULL,
@@ -41,7 +41,7 @@ CREATE TABLE IF NOT EXISTS materials (
     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
 );
 
--- 5. 성적 기록 테이블 (회차에 독립적 연결)
+-- 5. 성적 기록 (회차에 종속)
 CREATE TABLE IF NOT EXISTS scores (
     id INT AUTO_INCREMENT PRIMARY KEY,
     round_id INT NOT NULL,
@@ -58,7 +58,7 @@ CREATE TABLE IF NOT EXISTS scores (
     FOREIGN KEY (round_id) REFERENCES rounds(id) ON DELETE CASCADE
 );
 
--- 6. 문제 영역 좌표 정보
+-- 6. 문제 영역 좌표
 CREATE TABLE IF NOT EXISTS question_regions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     material_id INT NOT NULL,

@@ -12,7 +12,6 @@ const pool = mysql.createPool({
     waitForConnections: true,
     connectionLimit: 10,
     queueLimit: 0,
-    // ON DUPLICATE KEY UPDATE를 사용하려면 date 형식 호환을 위해 추가
     dateStrings: true
 });
 

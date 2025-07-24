@@ -171,7 +171,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 
-// 학생 명단 조회 (수정 없음)
+// 학생 명단 조회
 router.get('/roster', async (req, res) => {
     const { className } = req.query;
     if (!className) return res.status(400).json({ error: '분반 이름은 필수입니다.' });
@@ -181,13 +181,13 @@ router.get('/roster', async (req, res) => {
     } catch (err) { res.status(500).json({ error: '학생 명단 조회 오류' }); }
 });
 
-// 성적 목록 조회
+// 특정 회차의 성적 목록 조회
 router.get('/list', async (req, res) => {
     const { className, roundId } = req.query;
     if (!className || !roundId) return res.status(400).json({ error: '분반과 회차 ID는 필수입니다.' });
     try {
         const query = `
-            SELECT r.student_name, r.phone, r.school, s.test_score, s.assignment1, s.assignment2, s.total_question
+            SELECT r.student_name, r.phone, r.school, s.test_score, s.total_question, s.wrong_questions, s.assignment1, s.assignment2, s.memo
             FROM class_rosters AS r
             LEFT JOIN scores AS s ON r.phone = s.phone AND s.round_id = ?
             WHERE r.class_name = ? ORDER BY r.student_name;`;
@@ -200,13 +200,12 @@ router.get('/list', async (req, res) => {
 router.post('/save', async (req, res) => {
     const { round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo } = req.body;
     if (!round_id || !phone || test_score == null) return res.status(400).json({ error: '필수 항목 누락' });
-
     try {
         const sql = `
             INSERT INTO scores (round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE 
-                student_name=VALUES(student_name), school=VALUES(school), test_score=VALUES(test_score), total_question=VALUES(total_question), 
+            ON DUPLICATE KEY UPDATE
+                student_name=VALUES(student_name), school=VALUES(school), test_score=VALUES(test_score), total_question=VALUES(total_question),
                 wrong_questions=VALUES(wrong_questions), assignment1=VALUES(assignment1), assignment2=VALUES(assignment2), memo=VALUES(memo);`;
         await pool.query(sql, [round_id, student_name, phone, school, test_score, total_question, wrong_questions, assignment1, assignment2, memo || '']);
         res.status(200).json({ message: '성적이 성공적으로 저장되었습니다.' });
@@ -216,12 +215,28 @@ router.post('/save', async (req, res) => {
     }
 });
 
-// 성적 조회
+// 학생 이름으로 검색 (성적 입력 페이지용)
+router.get('/search-student', async (req, res) => {
+    const { className, name } = req.query;
+    if (!className || !name) return res.json([]);
+    try {
+        const query = 'SELECT student_name, phone, school FROM class_rosters WHERE class_name = ? AND student_name LIKE ?';
+        const [rows] = await pool.query(query, [className, `%${name}%`]);
+        res.json(rows);
+    } catch (err) { res.status(500).json({ error: '학생 검색 오류' }); }
+});
+
+// [추가] 성적 조회 API
 router.get('/inquiry', async (req, res) => {
     const { className, roundId, studentName } = req.query;
     try {
         let query = `
-            SELECT s.*, r.class_name, r.round_number, r.round_name, m.material_name 
+            SELECT 
+                s.*, 
+                r.class_name, 
+                r.round_number, 
+                r.round_name, 
+                m.material_name 
             FROM scores s 
             JOIN rounds r ON s.round_id = r.id 
             LEFT JOIN materials m ON r.id = m.round_id`;
@@ -241,14 +256,16 @@ router.get('/inquiry', async (req, res) => {
             params.push(`%${studentName}%`);
         }
 
-        if (conditions.length > 0) query += ' WHERE ' + conditions.join(' AND ');
+        if (conditions.length > 0) {
+            query += ' WHERE ' + conditions.join(' AND ');
+        }
         query += ' ORDER BY r.class_name, r.round_number, s.student_name';
 
         const [rows] = await pool.query(query, params);
         res.json(rows);
     } catch (err) {
-        console.error('성적 조회 오류:', err);
-        res.status(500).json({ error: '성적 조회 중 서버 오류' });
+        console.error('성적 조회 중 오류:', err);
+        res.status(500).json({ error: '성적 조회 중 서버 오류가 발생했습니다.' });
     }
 });
 
