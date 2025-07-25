@@ -1,3 +1,4 @@
+// 강의 자료 업로드 관련
 const express = require('express');
 const router = express.Router();
 const multer = require('multer');
@@ -38,17 +39,25 @@ const upload = multer({
 router.post('/upload', upload.single('materialFile'), async (req, res) => {
     // 프론트에서 보낸 'roundId', 'materialName', 'totalPages' 정보와
     // S3 업로드 후 반환된 파일 정보('key', 'location')를 받음
-    const { roundId, materialName, totalPages } = req.body;
-    const { key, location } = req.file;
+    // 자료명이 없을 경우, 원본 파일명을 사용하도록 기본값 설정
+    let { roundId, materialName, totalPages } = req.body;
+    const { key, location, originalname } = req.file;
+
+    if (!materialName)
+        materialName = originalname;
 
     try {
         // materials 테이블에 파일 정보 저장
-        const sql = 'INSERT INTO materials (round_id, material_name, file_key, file_url, total_pages) VALUES (?, ?, ?, ?, ?)';
-        const [result] = await pool.query(sql, [roundId, materialName, key, location, totalPages]);
+        const sql = `
+            INSERT INTO materials (round_id, material_name, file_key, file_url, total_pages)
+            VALUES (?, ?, ?, ?, ?)
+        `;
+        const [result] = await pool.query(sql,
+            [roundId, materialName, key, location, totalPages]);
 
         // 성공 시, 생성된 material의 ID와 URL을 프론트로 반환 (편집 페이지로 바로 이동시키기 위함)
         res.status(201).json({
-            message: '강의 자료가 성공적으로 업로드되었습니다.',
+            message: '강의 자료가 성공적으로 업로드 되었습니다.',
             materialId: result.insertId,
             materialUrl: location
         });
